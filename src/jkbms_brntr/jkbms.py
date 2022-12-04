@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 # zero means parse all incoming data (every second)
 CELL_INFO_REFRESH_S = 0
+DEVICE_INFO_REFRESH_S = 60*60*5 #every 5 Hours 
 CHAR_HANDLE="0000ffe1-0000-1000-8000-00805f9b34fb"
 MODEL_NBR_UUID = "00002a24-0000-1000-8000-00805f9b34fb"
 
@@ -46,27 +47,28 @@ class JkBmsBle:
     def decode_cellinfo_jk02(self):
        # global bms_status
         fb=self.frame_buffer
-        for i in range(0,self.bms_status["cell_count"]):
-            self.bms_status["cell_"+str(i+1)+"_voltage"]=self.ba_to_int(fb,6+(2*i),2)*0.001
+        self.bms_status["cell_info"]={}
+        for i in range(0,self.bms_status["settings"]["cell_count"]):
+            self.bms_status["cell_info"]["cell_"+str(i+1)+"_voltage"]=self.ba_to_int(fb,6+(2*i),2)*0.001
 
         debug(self.bms_status)
 
     def decode_settings_jk02(self):
        # global bms_status
         fb=self.frame_buffer
+        self.bms_status["settings"]={} 
+        self.bms_status["settings"]["cell_uvp"]=self.ba_to_int(fb,10,4)*0.001
+        self.bms_status["settings"]["cell_uvpr"]=self.ba_to_int(fb,14,4)*0.001
+        self.bms_status["settings"]["cell_ovp"]=self.ba_to_int(fb,18,4)*0.001
+
+        self.bms_status["settings"]["cell_ovpr"]=self.ba_to_int(fb,22,4)*0.001
     
-        self.bms_status["cell_uvp"]=self.ba_to_int(fb,10,4)*0.001
-        self.bms_status["cell_uvpr"]=self.ba_to_int(fb,14,4)*0.001
-        self.bms_status["cell_ovp"]=self.ba_to_int(fb,18,4)*0.001
-
-        self.bms_status["cell_ovpr"]=self.ba_to_int(fb,22,4)*0.001
-    
-        self.bms_status["balance_trigger_voltage"]=self.ba_to_int(fb,26,4)*0.001
-        self.bms_status["power_off_voltage"]=self.ba_to_int(fb,46,4)*0.001
-        self.bms_status["max_charge_current"]=self.ba_to_int(fb,50,4)*0.001
+        self.bms_status["settings"]["balance_trigger_voltage"]=self.ba_to_int(fb,26,4)*0.001
+        self.bms_status["settings"]["power_off_voltage"]=self.ba_to_int(fb,46,4)*0.001
+        self.bms_status["settings"]["max_charge_current"]=self.ba_to_int(fb,50,4)*0.001
 
 
-        self.bms_status["cell_count"]=self.ba_to_int(fb,114,4)
+        self.bms_status["settings"]["cell_count"]=self.ba_to_int(fb,114,4)
        # bms_status["charging_allowed"]=False if ba_to_int(fb,118,4) == 0 else True
        # bms_status["discharging_allowed"]=False if ba_to_int(fb,122,4) == 0 else True
     
@@ -118,7 +120,7 @@ class JkBmsBle:
             rcrc=self.frame_buffer[300-1]
             debug(f"compair recvd. crc: {rcrc} vs calc. crc: {ccrc}") 
             if ccrc == rcrc:
-                info("great success! frame complete and sane, lets go decoding")
+                debug("great success! frame complete and sane, lets go decoding")
                 self.decode()
                 self.frame_buffer=[]
 
@@ -183,7 +185,10 @@ class JkBmsBle:
         await self.writeRegister(cmd,b'\0\0\0\0',0x00,client)
     
     def get_status(self):
-        return self.bms_status
+        if "settings" in self.bms_status and  "cell_info" in self.bms_status:
+            return self.bms_status
+        else:
+            return None
 
  
     def __init__(self, addr):
@@ -196,17 +201,27 @@ class JkBmsBle:
         print("connect and scrape on address"+self.address)
         self.run = True
         while self.run: #autoreconnect
-            BleakClient(self.address)
+            client = BleakClient(self.address)
             print("btloop")
-            async with BleakClient(self.address) as client:
+            try:
+                await client.connect()
                 self.bms_status["model_nbr"]=  (await client.read_gatt_char(MODEL_NBR_UUID)).decode("utf-8")
     
                 await client.start_notify(CHAR_HANDLE, self.ncallback)
 #
                 await self.request_bt("device_info", client)
                 await self.request_bt("cell_info", client)
-                while client.is_connected and self.run:       
+                last_dev_info=time.time()
+                while client.is_connected and self.run:
+                    if time.time()-last_dev_info>DEVICE_INFO_REFRESH_S:
+                        last_dev_info=time.time()
+                        await self.request_bt("device_info", client)
                     await asyncio.sleep(0.01)
+            except Exception as e:
+                info("error while connecting to bt: " + str(e))
+                self.run=False
+            finally:
+                await client.disconnect()
         
         print("Exiting bt-loop")
 
@@ -216,6 +231,7 @@ class JkBmsBle:
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         bt_thread = threading.Thread(target=self.connect_and_scrape, args=())
         bt_thread.start()
+        info("scraping thread started")
     
     def stop_scraping(self):
         self.run=False
