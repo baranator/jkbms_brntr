@@ -3,7 +3,7 @@ from bleak import BleakScanner, BleakClient
 import time
 from logging import info, debug
 import logging
-from struct import unpack_from
+from struct import unpack_from,calcsize
 import threading
 logging.basicConfig(level=logging.INFO)
 
@@ -29,12 +29,38 @@ protocol_version=PROTOCOL_VERSION_JK02
 MIN_RESPONSE_SIZE = 300;
 MAX_RESPONSE_SIZE = 320;
 
-TRANSLATE_DEVICE_INFO=[
-        [["device_info","hw_rev"],22,8,"8s"],
-        [["device_info","sw_rev"],30,8,"8s"],
-        [["device_info","uptime"],38,4,"<L"],
-        [["device_info","power_cycles"],42,4,"<L"],
+TRANSLATE_DEVICE_INFO = [
+        [["device_info","hw_rev"],22,"8s"],
+        [["device_info","sw_rev"],30,"8s"],
+        [["device_info","uptime"],38,"<L"],
+
+        [["device_info","vendor_id"],6,"16s"],
+        [["device_info","manufacturing_date"],78,"8s"],
 ]
+
+TRANSLATE_SETTINGS = [
+    [["settings","cell_uvp"],10,"<L",0.001],
+    [["settings","cell_uvpr"],14,"<L"],
+    [["settings","cell_ovp"],18,"<L"],
+    [["settings","cell_ovpr"],22,"<L"],
+    [["settings","balance_trigger_voltage"],26,"<L"],
+    [["settings","power_off_voltage"],46,"<L"],
+    [["settings","max_charge_current"],50,"<L"],
+    [["settings","cell_count"],114,"<L"],
+       # bms_status["charging_allowed"]=False if ba_to_int(fb,118,4) == 0 else True
+    [["settings","charging_allowed"],118,"4?"],
+       # bms_status["discharging_allowed"]=False if ba_to_int(fb,122,4) == 0 else True
+    [["settings","discharging_allowed"],122,"4?"]
+]
+
+
+TRANSLATE_CELL_INFO = [
+    [["cell_info","voltages",16],6,"<H",0.001],
+    [["cell_info","resistances",16],64,"<H",0.001]
+]
+
+
+
 
 class JkBmsBle:
    # entries for translating the bytearray to py-object via unpack
@@ -57,54 +83,50 @@ class JkBmsBle:
         return int.from_bytes(arr[inclStart:inclStart+byteCount],byteorder="little")
     
     #iterative implementation maybe later due to referencing  
-    def translate(self, fb, translation, frame_type, o, i=0):
+    def translate(self, fb, translation,  o, i=0):
         if i == len(translation[0])-1 :
-            val=unpack_from(translation[3],bytearray(fb),translation[1])[0]
-            o[translation[0][i]]=val.decode("utf-8").rstrip(' \t\n\r\0') if isinstance(val, bytes) else val
-        else:    
-            self.translate(fb, translation, frame_type, o[translation[0][i]], i+1)
+            #keep things universal by using an n=1 list
+            kees=range(0,translation[0][i]) if isinstance(translation[0][i],int) else [translation[0][i]]
+            i=0
+            for j in kees:
+                val=unpack_from(translation[2],bytearray(fb),translation[1]+i)[0]
+                if isinstance(val,bytes):
+                    val=val.decode("utf-8").rstrip(' \t\n\r\0')
+                elif isinstance(val,int) and len(translation) == 4:
+                    val=val*translation[3]
+                o[j]=val
+                #calculate stepping in case of array
+                i=i+calcsize(translation[2])
+        else:
+            if translation[0][i] not in o:
+                if len(translation[0])==i+2 and isinstance(translation[0][i+1],int):
+                    o[translation[0][i]]=[None] * translation[0][i+1]
+                else:
+                    o[translation[0][i]]={}
+
+            self.translate(fb, translation, o[translation[0][i]], i+1)
             
 
     def decode_device_info_jk02(self):
         fb=self.frame_buffer
-        self.bms_status["device_info"]={}
         for t in TRANSLATE_DEVICE_INFO:
-            self.translate(fb, t, "device_info", self.bms_status)
-#        self.bms_status["device_info"]["hw_rev"]=bytearray(fb[22:30]).decode("utf-8").rstrip(' \t\n\r\0')
-#        self.bms_status["device_info"]["sw_rev"]=bytearray(fb[30:38]).decode("utf-8").rstrip(' \t\n\r\0')
- #       self.bms_status["device_info"]["uptime"]=self.ba_to_int(fb,38,4)
-  #      self.bms_status["device_info"]["power_on_count"]=self.ba_to_int(fb,42,4)
-
+            self.translate(fb, t, self.bms_status)
+    
     def decode_cellinfo_jk02(self):
        # global bms_status
         fb=self.frame_buffer
-        self.bms_status["cell_info"]={}
-        self.bms_status["cell_info"]["voltages"]=[]
-        for i in range(0,self.bms_status["settings"]["cell_count"]):
-            self.bms_status["cell_info"]["voltages"].append(self.ba_to_int(fb,6+(2*i),2)*0.001)
+            
+        for t in TRANSLATE_CELL_INFO:
+            self.translate(fb, t, self.bms_status)
 
         debug(self.bms_status)
 
     def decode_settings_jk02(self):
        # global bms_status
         fb=self.frame_buffer
-        self.bms_status["settings"]={}
-
-        self.bms_status["settings"]["cell_uvp"]=self.ba_to_int(fb,10,4)*0.001
-        self.bms_status["settings"]["cell_uvpr"]=self.ba_to_int(fb,14,4)*0.001
-        self.bms_status["settings"]["cell_ovp"]=self.ba_to_int(fb,18,4)*0.001
-
-        self.bms_status["settings"]["cell_ovpr"]=self.ba_to_int(fb,22,4)*0.001
-    
-        self.bms_status["settings"]["balance_trigger_voltage"]=self.ba_to_int(fb,26,4)*0.001
-        self.bms_status["settings"]["power_off_voltage"]=self.ba_to_int(fb,46,4)*0.001
-        self.bms_status["settings"]["max_charge_current"]=self.ba_to_int(fb,50,4)*0.001
-
-
-        self.bms_status["settings"]["cell_count"]=self.ba_to_int(fb,114,4)
-       # bms_status["charging_allowed"]=False if ba_to_int(fb,118,4) == 0 else True
-       # bms_status["discharging_allowed"]=False if ba_to_int(fb,122,4) == 0 else True
-    
+        for t in TRANSLATE_SETTINGS:
+            self.translate(fb,t, self.bms_status)
+            
         debug(self.bms_status)
 
     def decode(self):
@@ -150,8 +172,6 @@ class JkBmsBle:
     
         self.frame_buffer.extend(data)
     
-        #print(data)
-
         if len(self.frame_buffer) >= MIN_RESPONSE_SIZE:
             #check crc; always at position 300, independent of actual frame-lentgh, so crc up to 299
             ccrc=self.crc(self.frame_buffer,300-1)
@@ -232,7 +252,7 @@ class JkBmsBle:
         asyncio.run(self.asy_connect_and_scrape(main_thread))
     
     async def asy_connect_and_scrape(self, main_thread):
-        print("connect and scrape on address"+self.address)
+        print("connect and scrape on address: "+self.address)
         self.run = True
         while self.run and main_thread.is_alive(): #autoreconnect
             client = BleakClient(self.address)
@@ -273,9 +293,6 @@ class JkBmsBle:
         self.run=False
         exit()
 
-    #    await self.connect_and_scrape()      
-#        asyncio.create_task(self.connect_and_scrape())      
-      #  asyncio.get_event_loop().run_until_complete(self.connect_and_scrape())
 
 if __name__ == "__main__":
     jk = JkBmsBle("C8:47:8C:E4:54:0E")  
