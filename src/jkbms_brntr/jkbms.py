@@ -43,20 +43,30 @@ class JkBmsBle:
 
     def ba_to_int(self, arr, inclStart, byteCount):
         return int.from_bytes(arr[inclStart:inclStart+byteCount],byteorder="little")
+    
+    def decode_device_info_jk02(self):
+        fb=self.frame_buffer
+        self.bms_status["device_info"]={}
+        self.bms_status["device_info"]["hw_rev"]=bytearray(fb[22:30]).decode("utf-8").rstrip(' \t\n\r\0')
+        self.bms_status["device_info"]["sw_rev"]=bytearray(fb[30:38]).decode("utf-8").rstrip(' \t\n\r\0')
+        self.bms_status["device_info"]["uptime"]=self.ba_to_int(fb,38,4)
+        self.bms_status["device_info"]["power_on_count"]=self.ba_to_int(fb,42,4)
 
     def decode_cellinfo_jk02(self):
        # global bms_status
         fb=self.frame_buffer
         self.bms_status["cell_info"]={}
+        self.bms_status["cell_info"]["voltages"]=[]
         for i in range(0,self.bms_status["settings"]["cell_count"]):
-            self.bms_status["cell_info"]["cell_"+str(i+1)+"_voltage"]=self.ba_to_int(fb,6+(2*i),2)*0.001
+            self.bms_status["cell_info"]["voltages"].append(self.ba_to_int(fb,6+(2*i),2)*0.001)
 
         debug(self.bms_status)
 
     def decode_settings_jk02(self):
        # global bms_status
         fb=self.frame_buffer
-        self.bms_status["settings"]={} 
+        self.bms_status["settings"]={}
+
         self.bms_status["settings"]["cell_uvp"]=self.ba_to_int(fb,10,4)*0.001
         self.bms_status["settings"]["cell_uvpr"]=self.ba_to_int(fb,14,4)*0.001
         self.bms_status["settings"]["cell_ovp"]=self.ba_to_int(fb,18,4)*0.001
@@ -96,9 +106,14 @@ class JkBmsBle:
                     self.waiting_for_response=""
 
         elif info_type == 0x03:
+            
+            info("processing frame with device info")
+            if protocol_version == PROTOCOL_VERSION_JK02:
+                self.decode_device_info_jk02()
+            else:
+                return
             if self.waiting_for_response=="device_info":
                 self.waiting_for_response=""
-            info("processing frame with device info")
 
     def assemble_frame(self, data:bytearray):
         #global frame_buffer
