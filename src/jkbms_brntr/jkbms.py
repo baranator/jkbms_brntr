@@ -3,6 +3,7 @@ from bleak import BleakScanner, BleakClient
 import time
 from logging import info, debug
 import logging
+from struct import unpack_from
 import threading
 logging.basicConfig(level=logging.INFO)
 
@@ -28,12 +29,24 @@ protocol_version=PROTOCOL_VERSION_JK02
 MIN_RESPONSE_SIZE = 300;
 MAX_RESPONSE_SIZE = 320;
 
+TRANSLATE_DEVICE_INFO=[
+        [["device_info","hw_rev"],22,8,"8s"],
+        [["device_info","sw_rev"],30,8,"8s"],
+        [["device_info","uptime"],38,4,"<L"],
+        [["device_info","power_cycles"],42,4,"<L"],
+]
+
 class JkBmsBle:
+   # entries for translating the bytearray to py-object via unpack
+    # [[py dict entry as list, each entry ] ]
+   
     frame_buffer = bytearray()
     bms_status = {}
 
     waiting_for_response=""
     last_cell_info=0
+    def __init__(self, addr):
+        self.address = addr
 
     async def scanForDevices(self):
         devices = await BleakScanner.discover()
@@ -43,13 +56,24 @@ class JkBmsBle:
     def ba_to_int(self, arr, inclStart, byteCount):
         return int.from_bytes(arr[inclStart:inclStart+byteCount],byteorder="little")
     
+    #iterative implementation maybe later due to referencing  
+    def translate(self, fb, translation, frame_type, o, i=0):
+        if i == len(translation[0])-1 :
+            val=unpack_from(translation[3],bytearray(fb),translation[1])[0]
+            o[translation[0][i]]=val.decode("utf-8").rstrip(' \t\n\r\0') if isinstance(val, bytes) else val
+        else:    
+            self.translate(fb, translation, frame_type, o[translation[0][i]], i+1)
+            
+
     def decode_device_info_jk02(self):
         fb=self.frame_buffer
         self.bms_status["device_info"]={}
-        self.bms_status["device_info"]["hw_rev"]=bytearray(fb[22:30]).decode("utf-8").rstrip(' \t\n\r\0')
-        self.bms_status["device_info"]["sw_rev"]=bytearray(fb[30:38]).decode("utf-8").rstrip(' \t\n\r\0')
-        self.bms_status["device_info"]["uptime"]=self.ba_to_int(fb,38,4)
-        self.bms_status["device_info"]["power_on_count"]=self.ba_to_int(fb,42,4)
+        for t in TRANSLATE_DEVICE_INFO:
+            self.translate(fb, t, "device_info", self.bms_status)
+#        self.bms_status["device_info"]["hw_rev"]=bytearray(fb[22:30]).decode("utf-8").rstrip(' \t\n\r\0')
+#        self.bms_status["device_info"]["sw_rev"]=bytearray(fb[30:38]).decode("utf-8").rstrip(' \t\n\r\0')
+ #       self.bms_status["device_info"]["uptime"]=self.ba_to_int(fb,38,4)
+  #      self.bms_status["device_info"]["power_on_count"]=self.ba_to_int(fb,42,4)
 
     def decode_cellinfo_jk02(self):
        # global bms_status
@@ -203,10 +227,6 @@ class JkBmsBle:
             return self.bms_status
         else:
             return None
-
- 
-    def __init__(self, addr):
-        self.address = addr
 
     def connect_and_scrape(self, main_thread):
         asyncio.run(self.asy_connect_and_scrape(main_thread))
