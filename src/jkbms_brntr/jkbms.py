@@ -1,7 +1,6 @@
 import asyncio
 from bleak import BleakScanner, BleakClient
 import time
-import signal
 from logging import info, debug
 import logging
 import threading
@@ -209,13 +208,13 @@ class JkBmsBle:
     def __init__(self, addr):
         self.address = addr
 
-    def connect_and_scrape(self):
-        asyncio.run(self.asy_connect_and_scrape())
+    def connect_and_scrape(self, main_thread):
+        asyncio.run(self.asy_connect_and_scrape(main_thread))
     
-    async def asy_connect_and_scrape(self):
+    async def asy_connect_and_scrape(self, main_thread):
         print("connect and scrape on address"+self.address)
         self.run = True
-        while self.run: #autoreconnect
+        while self.run and main_thread.is_alive(): #autoreconnect
             client = BleakClient(self.address)
             print("btloop")
             try:
@@ -227,7 +226,7 @@ class JkBmsBle:
                 await self.request_bt("device_info", client)
                 await self.request_bt("cell_info", client)
                 last_dev_info=time.time()
-                while client.is_connected and self.run:
+                while client.is_connected and self.run and main_thread.is_alive():
                     if time.time()-last_dev_info>DEVICE_INFO_REFRESH_S:
                         last_dev_info=time.time()
                         await self.request_bt("device_info", client)
@@ -242,12 +241,11 @@ class JkBmsBle:
 
     
     def start_scraping(self):
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
-        bt_thread = threading.Thread(target=self.connect_and_scrape, args=())
+        m_thread=threading.current_thread()
+        bt_thread = threading.Thread(target=self.connect_and_scrape, args=(m_thread,))
         bt_thread.start()
-        info("scraping thread started")
-    
+        info("scraping thread started -> main thread id: "+str(m_thread.ident)+" scraping thread: "+str(bt_thread.ident))
+
     def stop_scraping(self):
         self.run=False
 
