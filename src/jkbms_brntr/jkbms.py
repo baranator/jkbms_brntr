@@ -227,11 +227,13 @@ class JkBmsBle:
     #    await self.connect_and_scrape()      
 #        asyncio.create_task(self.connect_and_scrape())      
       #  asyncio.get_event_loop().run_until_complete(self.connect_and_scrape())
-jk = JkBmsBle("C8:47:8C:E4:54:0E")  
-info("sss")
 
-jk.start_scraping()
-while True:
-    print("asdf")
-    print(jk.get_status())
-    time.sleep(2)
+if __name__ == "__main__":
+    jk = JkBmsBle("C8:47:8C:E4:54:0E")  
+    info("sss")
+
+    jk.start_scraping()
+    while True:
+        print("asdf")
+        print(jk.get_status())
+        time.sleep(2)
