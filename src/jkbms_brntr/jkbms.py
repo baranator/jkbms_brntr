@@ -40,25 +40,54 @@ TRANSLATE_DEVICE_INFO = [
 
 TRANSLATE_SETTINGS = [
     [["settings","cell_uvp"],10,"<L",0.001],
-    [["settings","cell_uvpr"],14,"<L"],
-    [["settings","cell_ovp"],18,"<L"],
-    [["settings","cell_ovpr"],22,"<L"],
-    [["settings","balance_trigger_voltage"],26,"<L"],
-    [["settings","power_off_voltage"],46,"<L"],
-    [["settings","max_charge_current"],50,"<L"],
+    [["settings","cell_uvpr"],14,"<L",0.001],
+    [["settings","cell_ovp"],18,"<L",0.001],
+    [["settings","cell_ovpr"],22,"<L",0.001],
+    [["settings","balance_trigger_voltage"],26,"<L",0.001],
+    [["settings","power_off_voltage"],46,"<L",0.001],
+    [["settings","max_charge_current"],50,"<L",0.001],
+    [["settings","max_discharge_current"],62,"<L",0.001],
+    [["settings","max_balance_current"],50,"<L",0.001],
     [["settings","cell_count"],114,"<L"],
-       # bms_status["charging_allowed"]=False if ba_to_int(fb,118,4) == 0 else True
-    [["settings","charging_allowed"],118,"4?"],
-       # bms_status["discharging_allowed"]=False if ba_to_int(fb,122,4) == 0 else True
-    [["settings","discharging_allowed"],122,"4?"]
+    [["settings","charging_switch"],118,"4?"],
+    [["settings","discharging_switch"],122,"4?"],
+    [["settings","balancing_switch"],126,"4?"],
 ]
 
 
 TRANSLATE_CELL_INFO = [
     [["cell_info","voltages",16],6,"<H",0.001],
-    [["cell_info","resistances",16],64,"<H",0.001]
-]
 
+    [["cell_info","average_cell_voltage"],58,"<H",0.001],
+    [["cell_info","delta_cell_voltage"],60,"<H",0.001],
+    [["cell_info","max_voltage_cell"],62,"<B"],
+    [["cell_info","min_voltage_cell"],63,"<B"],
+    [["cell_info","resistances",16],64,"<H",0.001],
+    [["cell_info","total_voltage"],118,"<H",0.001],
+    [["cell_info","total_voltage"],118,"<H",0.001],
+
+    
+    [["cell_info","temperature_sensor_1"],130,"<H",0.1],
+    [["cell_info","temperature_sensor_2"],132,"<H",0.1],
+
+    [["cell_info","balancing_current"],138,"<H",0.001],
+    [["cell_info","balancing_action"],140,"<B",0.001],
+
+    [["cell_info","battery_soc"],141,"<B",1.0],
+
+    [["cell_info","capacity_remain"],142,"<L",0.001],
+
+    [["cell_info","capacity_nominal"],146,"<L",0.001],
+
+    [["cell_info","cycle_count"],150,"<L",0.001],
+    [["cell_info","cycle_capacity"],154,"<L",0.001],
+
+
+    [["cell_info","charging_switch_enabled"],166,"1?"],
+    [["cell_info","discharging_switch_enabled"],167,"1?"],
+    [["cell_info","balancing_active"],191,"1?"],
+
+]
 
 
 
@@ -192,7 +221,7 @@ class JkBmsBle:
             crc = crc + a;
         return crc.to_bytes(2, 'little')[0]
 
-    async def writeRegister(self, address, vals :bytearray,length:int, bleakC:BleakClient):
+    async def write_register(self, address, vals :bytearray,length:int, bleakC:BleakClient):
         frame = bytearray(20)
         frame[0] = 0xAA      #start sequence
         frame[1] = 0x55      #start sequence
@@ -240,7 +269,7 @@ class JkBmsBle:
         else:
             return
             
-        await self.writeRegister(cmd,b'\0\0\0\0',0x00,client)
+        await self.write_register(cmd,b'\0\0\0\0',0x00,client)
     
     def get_status(self):
         if "settings" in self.bms_status and  "cell_info" in self.bms_status:
@@ -265,6 +294,7 @@ class JkBmsBle:
 #
                 await self.request_bt("device_info", client)
                 await self.request_bt("cell_info", client)
+   #             await self.enable_charging(client)
                 last_dev_info=time.time()
                 while client.is_connected and self.run and main_thread.is_alive():
                     if time.time()-last_dev_info>DEVICE_INFO_REFRESH_S:
@@ -288,11 +318,13 @@ class JkBmsBle:
 
     def stop_scraping(self):
         self.run=False
-
-    def exit_gracefully(self, *args):
-        self.run=False
-        exit()
-
+    
+    async def enable_charging(self,c):
+        # these are the registers for the control-buttons; data is 01 00 00 00 for on  00 00 00 00 for off; the following bytes up to 19 are unclear and changing dynamically -> auth-mechanism?  
+        await self.write_register(0x1d,b'\x01\x00\x00\x00',4,c)
+        await self.write_register(0x1e,b'\x01\x00\x00\x00',4,c)
+        await self.write_register(0x1f,b'\x01\x00\x00\x00',4,c)
+        await self.write_register(0x40,b'\x01\x00\x00\x00',4,c)
 
 if __name__ == "__main__":
     jk = JkBmsBle("C8:47:8C:E4:54:0E")  
