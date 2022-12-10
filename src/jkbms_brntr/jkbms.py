@@ -64,12 +64,13 @@ TRANSLATE_CELL_INFO = [
     [["cell_info","min_voltage_cell"],63,"<B"],
     [["cell_info","resistances",16],64,"<H",0.001],
     [["cell_info","total_voltage"],118,"<H",0.001],
-    [["cell_info","total_voltage"],118,"<H",0.001],
 
+    [["cell_info","current"],126,"<l",0.001],
     
+
     [["cell_info","temperature_sensor_1"],130,"<H",0.1],
     [["cell_info","temperature_sensor_2"],132,"<H",0.1],
-
+    [["cell_info","error_bitmask"],136,2],
     [["cell_info","balancing_current"],138,"<H",0.001],
     [["cell_info","balancing_action"],140,"<B",0.001],
 
@@ -79,7 +80,7 @@ TRANSLATE_CELL_INFO = [
 
     [["cell_info","capacity_nominal"],146,"<L",0.001],
 
-    [["cell_info","cycle_count"],150,"<L",0.001],
+    [["cell_info","cycle_count"],150,"<L"],
     [["cell_info","cycle_capacity"],154,"<L",0.001],
 
 
@@ -108,9 +109,6 @@ class JkBmsBle:
         for d in devices:
             print(d)
 
-    def ba_to_int(self, arr, inclStart, byteCount):
-        return int.from_bytes(arr[inclStart:inclStart+byteCount],byteorder="little")
-    
     #iterative implementation maybe later due to referencing  
     def translate(self, fb, translation,  o, i=0):
         if i == len(translation[0])-1 :
@@ -118,14 +116,19 @@ class JkBmsBle:
             kees=range(0,translation[0][i]) if isinstance(translation[0][i],int) else [translation[0][i]]
             i=0
             for j in kees:
-                val=unpack_from(translation[2],bytearray(fb),translation[1]+i)[0]
+                if isinstance(translation[2],int):
+                    #handle raw bytes without unpack_from; 3param gives no format but number of bytes
+                    val=bytearray(fb[translation[1]+i:translation[1]+i+translation[2]])
+                    i += translation[2]
+                else:
+                    val=unpack_from(translation[2],bytearray(fb),translation[1]+i)[0]
+                    #calculate stepping in case of array
+                    i=i+calcsize(translation[2])
                 if isinstance(val,bytes):
                     val=val.decode("utf-8").rstrip(' \t\n\r\0')
                 elif isinstance(val,int) and len(translation) == 4:
                     val=val*translation[3]
                 o[j]=val
-                #calculate stepping in case of array
-                i=i+calcsize(translation[2])
         else:
             if translation[0][i] not in o:
                 if len(translation[0])==i+2 and isinstance(translation[0][i+1],int):
@@ -147,7 +150,6 @@ class JkBmsBle:
             
         for t in TRANSLATE_CELL_INFO:
             self.translate(fb, t, self.bms_status)
-
         debug(self.bms_status)
 
     def decode_settings_jk02(self):
@@ -166,16 +168,19 @@ class JkBmsBle:
             info("Processing frame with settings info")
             if protocol_version == PROTOCOL_VERSION_JK02:
                 self.decode_settings_jk02()
-            else:
-                return
+                self.bms_status["last_update"]=time.time()
+            
+
         elif info_type == 0x02:
             if CELL_INFO_REFRESH_S==0 or time.time()-last_cell_info > CELL_INFO_REFRESH_S:
                 self.last_cell_info=time.time()
                 info("processing frame with battery cell info")
                 if protocol_version == PROTOCOL_VERSION_JK02:
                     self.decode_cellinfo_jk02()
-                else:
-                    return
+                    self.bms_status["last_update"]=time.time()
+                #overriding special values
+                ## power is calculated from voltage x current as register 122 contains unsigned power-value
+                self.bms_status["cell_info"]["power"]=self.bms_status["cell_info"]["current"]*self.bms_status["cell_info"]["total_voltage"]
                 if self.waiting_for_response=="cell_info":
                     self.waiting_for_response=""
 
@@ -184,6 +189,7 @@ class JkBmsBle:
             info("processing frame with device info")
             if protocol_version == PROTOCOL_VERSION_JK02:
                 self.decode_device_info_jk02()
+                self.bms_status["last_update"]=time.time()
             else:
                 return
             if self.waiting_for_response=="device_info":
