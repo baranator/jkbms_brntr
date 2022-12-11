@@ -70,7 +70,7 @@ TRANSLATE_CELL_INFO = [
 
     [["cell_info","temperature_sensor_1"],130,"<H",0.1],
     [["cell_info","temperature_sensor_2"],132,"<H",0.1],
-    [["cell_info","error_bitmask"],136,2],
+ #   [["cell_info","error_bitmask"],136,"<H"],
     [["cell_info","balancing_current"],138,"<H",0.001],
     [["cell_info","balancing_action"],140,"<B",0.001],
 
@@ -138,6 +138,18 @@ class JkBmsBle:
 
             self.translate(fb, translation, o[translation[0][i]], i+1)
             
+    def decode_warnings(self,fb):
+        val=unpack_from("<H",bytearray(fb),136)[0]
+        
+        if "warnings" not in self.bms_status:
+            self.bms_status["warnings"]={}
+
+        self.bms_status["warnings"]["charge_overtemp"]=bool(val & (1<<0))
+        self.bms_status["warnings"]["charge_undertemp"]=bool(val & (1<<1))
+        self.bms_status["warnings"]["cell_undervoltage"]=bool(val & (1<<3))
+        self.bms_status["warnings"]["cell_overvoltage"]=bool(val & (1<<13))
+        self.bms_status["warnings"]["cell_count_wrong"]=bool(val & (1<<11))
+
 
     def decode_device_info_jk02(self):
         fb=self.frame_buffer
@@ -150,6 +162,7 @@ class JkBmsBle:
             
         for t in TRANSLATE_CELL_INFO:
             self.translate(fb, t, self.bms_status)
+        self.decode_warnings(fb)
         debug(self.bms_status)
 
     def decode_settings_jk02(self):
