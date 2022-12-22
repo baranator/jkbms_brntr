@@ -70,7 +70,7 @@ TRANSLATE_CELL_INFO = [
 
     [["cell_info","temperature_sensor_1"],130,"<H",0.1],
     [["cell_info","temperature_sensor_2"],132,"<H",0.1],
- #   [["cell_info","error_bitmask"],136,"<H"],
+    #[["cell_info","error_bitmask"],136,"<H"],
     [["cell_info","balancing_current"],138,"<H",0.001],
     [["cell_info","balancing_action"],140,"<B",0.001],
 
@@ -140,15 +140,34 @@ class JkBmsBle:
             
     def decode_warnings(self,fb):
         val=unpack_from("<H",bytearray(fb),136)[0]
-        
+
+        self.bms_status["cell_info"]["error_bitmask_16"]=hex(val)    
+        self.bms_status["cell_info"]["error_bitmask_2"]=format(val,'016b')    
+
+
+
         if "warnings" not in self.bms_status:
             self.bms_status["warnings"]={}
 
-        self.bms_status["warnings"]["charge_overtemp"]=bool(val & (1<<0))
-        self.bms_status["warnings"]["charge_undertemp"]=bool(val & (1<<1))
+
+        self.bms_status["warnings"]["resistance_too_high"]=bool(val & (1<<0))
+        
+        self.bms_status["warnings"]["cell_count_wrong"]=bool(val & (1<<2))
+        self.bms_status["warnings"]["charge_overtemp"]=bool(val & (1<<8))
+        
+        self.bms_status["warnings"]["charge_undertemp"]=bool(val & (1<<9))
+        self.bms_status["warnings"]["discharge_overtemp"]=bool(val & (1<<15))
+       
+
+        
+        
+        #bis hierhin verifiziert, rest zu testen
+
+
+
+
         self.bms_status["warnings"]["cell_undervoltage"]=bool(val & (1<<3))
         self.bms_status["warnings"]["cell_overvoltage"]=bool(val & (1<<13))
-        self.bms_status["warnings"]["cell_count_wrong"]=bool(val & (1<<11))
 
 
     def decode_device_info_jk02(self):
@@ -189,6 +208,10 @@ class JkBmsBle:
                 self.last_cell_info=time.time()
                 info("processing frame with battery cell info")
                 if protocol_version == PROTOCOL_VERSION_JK02:
+                    self.decode_cellinfo_jk02()
+                    self.bms_status["last_update"]=time.time()
+                #overriding special values
+                ## power is calculated from voltage x current as register 122 contains unsigned power-value
                     self.decode_cellinfo_jk02()
                     self.bms_status["last_update"]=time.time()
                 #overriding special values
