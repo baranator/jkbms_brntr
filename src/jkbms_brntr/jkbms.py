@@ -152,22 +152,22 @@ class JkBmsBle:
 
         self.bms_status["warnings"]["resistance_too_high"]=bool(val & (1<<0))
         
-        self.bms_status["warnings"]["cell_count_wrong"]=bool(val & (1<<2))
+        self.bms_status["warnings"]["cell_count_wrong"]=bool(val & (1<<2))   #?
         self.bms_status["warnings"]["charge_overtemp"]=bool(val & (1<<8))
         
         self.bms_status["warnings"]["charge_undertemp"]=bool(val & (1<<9))
         self.bms_status["warnings"]["discharge_overtemp"]=bool(val & (1<<15))
        
+        self.bms_status["warnings"]["cell_overvoltage"]=bool(val & (1<<4))
+        
+        
+        self.bms_status["warnings"]["cell_undervoltage"]=bool(val & (1<<11))
 
-        
-        
+        self.bms_status["warnings"]["charge_overcurrent"]=bool(val & (1<<6))
+        self.bms_status["warnings"]["discharge_overcurrent"]=bool(val & (1<<13))
+
         #bis hierhin verifiziert, rest zu testen
 
-
-
-
-        self.bms_status["warnings"]["cell_undervoltage"]=bool(val & (1<<3))
-        self.bms_status["warnings"]["cell_overvoltage"]=bool(val & (1<<13))
 
 
     def decode_device_info_jk02(self):
