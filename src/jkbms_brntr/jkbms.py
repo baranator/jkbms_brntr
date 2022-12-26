@@ -70,11 +70,11 @@ TRANSLATE_CELL_INFO = [
 
     [["cell_info","temperature_sensor_1"],130,"<H",0.1],
     [["cell_info","temperature_sensor_2"],132,"<H",0.1],
-    #[["cell_info","error_bitmask"],136,"<H"],
+    [["cell_info","temperature_mos"],134,"<H",0.1],
     [["cell_info","balancing_current"],138,"<H",0.001],
     [["cell_info","balancing_action"],140,"<B",0.001],
 
-    [["cell_info","battery_soc"],141,"<B",1.0],
+    [["cell_info","battery_soc"],141,"B"],
 
     [["cell_info","capacity_remain"],142,"<L",0.001],
 
@@ -376,4 +376,4 @@ if __name__ == "__main__":
     while True:
         print("asdf")
         print(jk.get_status())
-        time.sleep(2)
+        time.sleep(5)
