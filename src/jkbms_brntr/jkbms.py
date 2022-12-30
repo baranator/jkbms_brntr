@@ -103,6 +103,7 @@ class JkBmsBle:
     last_cell_info=0
     def __init__(self, addr):
         self.address = addr
+        self.bt_thread = threading.Thread(target=self.connect_and_scrape)
 
     async def scanForDevices(self):
         devices = await BleakScanner.discover()
@@ -319,13 +320,13 @@ class JkBmsBle:
         else:
             return None
 
-    def connect_and_scrape(self, main_thread):
-        asyncio.run(self.asy_connect_and_scrape(main_thread))
+    def connect_and_scrape(self):
+        asyncio.run(self.asy_connect_and_scrape())
     
-    async def asy_connect_and_scrape(self, main_thread):
+    async def asy_connect_and_scrape(self):
         print("connect and scrape on address: "+self.address)
         self.run = True
-        while self.run and main_thread.is_alive(): #autoreconnect
+        while self.run and self.main_thread.is_alive(): #autoreconnect
             client = BleakClient(self.address)
             print("btloop")
             try:
@@ -338,7 +339,7 @@ class JkBmsBle:
                 await self.request_bt("cell_info", client)
    #             await self.enable_charging(client)
                 last_dev_info=time.time()
-                while client.is_connected and self.run and main_thread.is_alive():
+                while client.is_connected and self.run and self.main_thread.is_alive():
                     if time.time()-last_dev_info>DEVICE_INFO_REFRESH_S:
                         last_dev_info=time.time()
                         await self.request_bt("device_info", client)
@@ -352,15 +353,21 @@ class JkBmsBle:
         print("Exiting bt-loop")
 
     
-    def start_scraping(self):
-        m_thread=threading.current_thread()
-        bt_thread = threading.Thread(target=self.connect_and_scrape, args=(m_thread,))
-        bt_thread.start()
-        info("scraping thread started -> main thread id: "+str(m_thread.ident)+" scraping thread: "+str(bt_thread.ident))
+    def start_scraping(self):  
+        self.main_thread=threading.current_thread()
+        if self.is_running():
+            return
+        self.bt_thread.start()
+        info("scraping thread started -> main thread id: "+str(self.main_thread.ident)+" scraping thread: "+str(self.bt_thread.ident))
 
     def stop_scraping(self):
         self.run=False
+        while is_running():
+            time.sleep(0.1)
     
+    def is_running(self):
+        return self.bt_thread.is_alive() and self.run and time.time()-self.bms_status["last_update"]<2*60
+
     async def enable_charging(self,c):
         # these are the registers for the control-buttons; data is 01 00 00 00 for on  00 00 00 00 for off; the following bytes up to 19 are unclear and changing dynamically -> auth-mechanism?  
         await self.write_register(0x1d,b'\x01\x00\x00\x00',4,c)
@@ -371,7 +378,6 @@ class JkBmsBle:
 if __name__ == "__main__":
     jk = JkBmsBle("C8:47:8C:E4:54:0E")  
     info("sss")
-
     jk.start_scraping()
     while True:
         print("asdf")
