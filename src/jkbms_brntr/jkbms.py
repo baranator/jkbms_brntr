@@ -334,8 +334,8 @@ class JkBmsBle:
                 self.bms_status["model_nbr"]=  (await client.read_gatt_char(MODEL_NBR_UUID)).decode("utf-8")
     
                 await client.start_notify(CHAR_HANDLE, self.ncallback)
-#
                 await self.request_bt("device_info", client)
+   
                 await self.request_bt("cell_info", client)
    #             await self.enable_charging(client)
                 last_dev_info=time.time()
@@ -346,7 +346,7 @@ class JkBmsBle:
                     await asyncio.sleep(0.01)
             except Exception as e:
                 info("error while connecting to bt: " + str(e))
-                self.run=False
+#                self.run=False
             finally:
                 await client.disconnect()
         
