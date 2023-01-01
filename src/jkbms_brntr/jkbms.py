@@ -346,7 +346,7 @@ class JkBmsBle:
                     await asyncio.sleep(0.01)
             except Exception as e:
                 info("error while connecting to bt: " + str(e))
-#                self.run=False
+                self.run=False
             finally:
                 await client.disconnect()
         
@@ -366,7 +366,7 @@ class JkBmsBle:
             time.sleep(0.1)
     
     def is_running(self):
-        return self.bt_thread.is_alive() and self.run and time.time()-self.bms_status["last_update"]<2*60
+        return self.bt_thread.is_alive()
 
     async def enable_charging(self,c):
         # these are the registers for the control-buttons; data is 01 00 00 00 for on  00 00 00 00 for off; the following bytes up to 19 are unclear and changing dynamically -> auth-mechanism?  
