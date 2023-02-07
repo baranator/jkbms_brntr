@@ -308,6 +308,7 @@ class JkBmsBle:
             client = BleakClient(self.address)
             print("btloop")
             try:
+                print("reconnect")
                 await client.connect()
                 self.bms_status["model_nbr"] = (
                     await client.read_gatt_char(MODEL_NBR_UUID)
@@ -327,7 +328,11 @@ class JkBmsBle:
                 info("error while connecting to bt: " + str(e))
                 self.run = False
             finally:
-                await client.disconnect()
+                if client.is_connected:
+                    try:
+                        await client.disconnect()
+                    except Exception as e:
+                        info("error while disconnecting")
 
         print("Exiting bt-loop")
 
