@@ -347,11 +347,15 @@ class JkBmsBle:
             + " scraping thread: "
             + str(self.bt_thread.ident)
         )
-
+    
     def stop_scraping(self):
         self.run = False
+        stop = time.time()
         while self.is_running():
             time.sleep(0.1)
+            if time.time() - stop > 10:
+                return False
+        return True
 
     def is_running(self):
         return self.bt_thread.is_alive()
