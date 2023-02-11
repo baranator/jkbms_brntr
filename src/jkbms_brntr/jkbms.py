@@ -174,7 +174,7 @@ class JkBmsBle:
 
     def decode_cellinfo_jk02(self):
         fb = self.frame_buffer
-        has32s = (fb[189] == 0x00 and data[189 + 32] > 0)
+        has32s = (fb[189] == 0x00 and fb[189 + 32] > 0)
         for t in TRANSLATE_CELL_INFO:
             self.translate(fb, t, self.bms_status, f32s=has32s)
         self.decode_warnings(fb)
