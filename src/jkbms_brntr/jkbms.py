@@ -111,10 +111,10 @@ class JkBmsBle:
 
             offset = 0
             if f32s:
-                if translation[1] >=112:
-                    offset = 16
-                elif translation[1] >= 54:
+                if translation[1] >= 112:
                     offset = 32
+                elif translation[1] >= 54:
+                    offset = 16
             
             i = 0
             for j in kees:
