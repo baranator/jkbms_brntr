@@ -145,7 +145,7 @@ class JkBmsBle:
                 else:
                     o[translation[0][i]] = {}
 
-            self.translate(fb, translation, o[translation[0][i]], f32s=f32s, i + 1)
+            self.translate(fb, translation, o[translation[0][i]], f32s=f32s, i=i + 1)
 
     def decode_warnings(self, fb):
         val = unpack_from("<H", bytearray(fb), 136)[0]
