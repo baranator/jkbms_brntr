@@ -184,11 +184,6 @@ class JkBmsBle:
             info("Processing frame with settings info")
             if protocol_version == PROTOCOL_VERSION_JK02:
                 self.decode_settings_jk02()
-                # adapt translation table for cell array lengths
-                ccount = self.bms_status["settings"]["cell_count"]
-                for i, t in enumerate(TRANSLATE_CELL_INFO):
-                    if t[0][-2] == "voltages" or t[0][-2] == "voltages":
-                        TRANSLATE_CELL_INFO[i][0][-1] = ccount
                 self.bms_status["last_update"] = time.time()
 
         elif info_type == 0x02:
