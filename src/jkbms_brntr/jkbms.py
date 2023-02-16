@@ -321,8 +321,6 @@ class JkBmsBle:
                 # await self.enable_charging(client)
                 last_dev_info = time.time()
                 while client.is_connected and self.run and self.main_thread.is_alive():
-                    if time.time() - last_dev_info > DEVICE_INFO_REFRESH_S:
-                        await client.disconnect()
                     await asyncio.sleep(0.01)
             except Exception as e:
                 info("error while connecting to bt: " + str(e))
